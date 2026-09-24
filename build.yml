@@ -1,0 +1,50 @@
+name: build
+on: workflow_dispatch
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Build
+        run: |
+          mkdir www && cp index.html www/
+          npm init -y
+          npm i @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 @capacitor/local-notifications@6
+          echo '{"appId":"com.mozakarty.app","appName":"مذاكرتي","webDir":"www"}' > capacitor.config.json
+          npx cap add android
+          npx cap sync android
+          mkdir -p android/app/src/main/res/raw
+          python3 - <<'PY'
+          import wave,struct,math
+          R={'ring_end':[1047,880,784,659,523,659,523],'ring_start':[523,659,784,1047,784,1047,1047]}
+          sr=22050
+          for n,notes in R.items():
+              d=[]
+              for rp in range(3):
+                  for f in notes:
+                      L=int(.38*sr)
+                      for i in range(L):
+                          e=min(1,i/300)*min(1,(L-i)/700)
+                          d.append(int(30000*e*(math.sin(2*math.pi*f*i/sr)+.5*math.sin(4*math.pi*f*i/sr))/1.5))
+                      d+=[0]*int(.04*sr)
+              w=wave.open('android/app/src/main/res/raw/'+n+'.wav','wb')
+              w.setnchannels(1);w.setsampwidth(2);w.setframerate(sr)
+              w.writeframes(b''.join(struct.pack('<h',x) for x in d));w.close()
+          PY
+          sed -i 's|<application|<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/><uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/><uses-permission android:name="android.permission.USE_EXACT_ALARM"/><uses-permission android:name="android.permission.VIBRATE"/><application|' android/app/src/main/AndroidManifest.xml
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          files: android/app/build/outputs/apk/debug/app-debug.apk
