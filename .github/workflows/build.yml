@@ -16,14 +16,56 @@ jobs:
           java-version: 17
       - name: Prepare
         run: |
-          test -f index.html || { echo "index.html ظ…ط´ ظ…ظˆط¬ظˆط¯ ظپظٹ ط¬ط°ط± ط§ظ„ط±ظٹط¨ظˆ"; ls -la; exit 1; }
+          test -f index.html || { echo "index.html not found in repo root"; ls -la; exit 1; }
           mkdir -p www && cp index.html www/
           npm init -y
           npm i --legacy-peer-deps @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 @capacitor/local-notifications@6
-          npm i --legacy-peer-deps @capgo/capacitor-android-kiosk || echo "kiosk plugin skipped"
-          echo '{"appId":"com.mozakarty.app","appName":"ظ…ط°ط§ظƒط±طھظٹ","webDir":"www"}' > capacitor.config.json
+          npm i --legacy-peer-deps @capgo/capacitor-android-kiosk@6 || npm i --legacy-peer-deps @capgo/capacitor-android-kiosk || echo "kiosk plugin skipped"
+          echo '{"appId":"com.mozakarty.app","appName":"Mozakarty","webDir":"www"}' > capacitor.config.json
           npx cap add android
           npx cap sync android
+          python3 - <<'PY2'
+          import re
+          name=''.join('&#%d;'%ord(c) for c in '\u0645\u0630\u0627\u0643\u0631\u062a\u064a')
+          f='android/app/src/main/res/values/strings.xml'
+          t=open(f,encoding='utf-8').read()
+          t=re.sub(r'(<string name="(?:app_name|title_activity_main)">)[^<]*(</string>)',lambda m:m.group(1)+name+m.group(2),t)
+          open(f,'w',encoding='ascii').write(t)
+          print(t)
+          PY2
+          python3 - <<'PY4'
+          import re
+          m='android/app/src/main/AndroidManifest.xml'
+          t=open(m,encoding='utf-8').read()
+          home='<category android:name="android.intent.category.LAUNCHER" /></intent-filter><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.HOME" /><category android:name="android.intent.category.DEFAULT" />'
+          t,n=re.subn(r'<category android:name="android.intent.category.LAUNCHER"\s*/>',lambda x:home,t,count=1)
+          print('home filter added:',n)
+          open(m,'w',encoding='utf-8').write(t)
+          h='android/app/src/main/assets/public/index.html'
+          j=open(h,encoding='utf-8').read()
+          j=j.replace("if(!KIOSK)return '<p><small>","if(!KIOSK)return '<p><small>[native='+NAT+'] ")
+          j=j.replace("await KIOSK.setAsLauncher()}catch(e){}","await KIOSK.setAsLauncher()}catch(e){alert('launcher error: '+(e&&e.message||JSON.stringify(e)))}")
+          j=j.replace("try{KIOSK.enterKioskMode()}catch(e){}","try{Promise.resolve(KIOSK.enterKioskMode()).catch(e=>alert('kiosk error: '+(e&&e.message||JSON.stringify(e))))}catch(e){}")
+          open(h,'w',encoding='utf-8').write(j)
+          PY4
+          if [ -f icon.png ]; then
+            mkdir -p assets
+            pip install pillow -q
+          python3 - <<'PY3'
+          from PIL import Image, ImageFilter
+          ic=Image.open('icon.png').convert('RGBA').resize((1024,1024),Image.LANCZOS)
+          bg=ic.convert('RGB').crop((250,250,774,774)).resize((1024,1024),Image.LANCZOS).filter(ImageFilter.GaussianBlur(60)).convert('RGBA')
+          bg.save('assets/icon-background.png')
+          fg=Image.new('RGBA',(1024,1024),(0,0,0,0)); s=int(1024*.68)
+          fg.paste(ic.resize((s,s),Image.LANCZOS),((1024-s)//2,(1024-s)//2))
+          fg.save('assets/icon-foreground.png')
+          only=bg.copy(); s2=int(1024*.94)
+          only.alpha_composite(ic.resize((s2,s2),Image.LANCZOS),((1024-s2)//2,(1024-s2)//2))
+          only.save('assets/icon-only.png')
+          PY3
+            npm i --legacy-peer-deps -D @capacitor/assets
+            npx capacitor-assets generate --android || echo "icon generation skipped"
+          fi
           mkdir -p android/app/src/main/res/raw
           python3 - <<'PY'
           import wave,struct,math
@@ -48,7 +90,7 @@ jobs:
           cd android
           chmod +x gradlew
           if ! ./gradlew assembleDebug --stacktrace; then
-            echo "::warning::ط§ظ„ط¨ظ†ط§ط، ظپط´ظ„ ظ…ط¹ kiosk - ظ‡ط¬ط±ط¨ ظ…ظ† ط؛ظٹط±ظ‡"
+            echo "::warning::build failed with kiosk plugin, retrying without it"
             cd ..
             npm rm --legacy-peer-deps @capgo/capacitor-android-kiosk || true
             npx cap sync android
