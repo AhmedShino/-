@@ -20,7 +20,6 @@ jobs:
           mkdir -p www && cp index.html www/
           npm init -y
           npm i --legacy-peer-deps @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 @capacitor/local-notifications@6
-          npm i --legacy-peer-deps @capgo/capacitor-android-kiosk@6 || npm i --legacy-peer-deps @capgo/capacitor-android-kiosk || echo "kiosk plugin skipped"
           echo '{"appId":"com.mozakarty.app","appName":"Mozakarty","webDir":"www"}' > capacitor.config.json
           npx cap add android
           npx cap sync android
@@ -33,34 +32,32 @@ jobs:
           open(f,'w',encoding='ascii').write(t)
           print(t)
           PY2
-          python3 - <<'PY4'
-          import re
-          m='android/app/src/main/AndroidManifest.xml'
-          t=open(m,encoding='utf-8').read()
-          home='<category android:name="android.intent.category.LAUNCHER" /></intent-filter><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.HOME" /><category android:name="android.intent.category.DEFAULT" />'
-          t,n=re.subn(r'<category android:name="android.intent.category.LAUNCHER"\s*/>',lambda x:home,t,count=1)
-          print('home filter added:',n)
-          open(m,'w',encoding='utf-8').write(t)
-          h='android/app/src/main/assets/public/index.html'
-          j=open(h,encoding='utf-8').read()
-          j=j.replace("if(!KIOSK)return '<p><small>","if(!KIOSK)return '<p><small>[native='+NAT+'] ")
-          j=j.replace("await KIOSK.setAsLauncher()}catch(e){}","await KIOSK.setAsLauncher()}catch(e){alert('launcher error: '+(e&&e.message||JSON.stringify(e)))}")
-          j=j.replace("try{KIOSK.enterKioskMode()}catch(e){}","try{Promise.resolve(KIOSK.enterKioskMode()).catch(e=>alert('kiosk error: '+(e&&e.message||JSON.stringify(e))))}catch(e){}")
-          open(h,'w',encoding='utf-8').write(j)
-          PY4
           if [ -f icon.png ]; then
             mkdir -p assets
             pip install pillow -q
+          pip install numpy -q
           python3 - <<'PY3'
-          from PIL import Image, ImageFilter
+          from PIL import Image, ImageFilter, ImageDraw
+          import numpy as np
           ic=Image.open('icon.png').convert('RGBA').resize((1024,1024),Image.LANCZOS)
-          bg=ic.convert('RGB').crop((250,250,774,774)).resize((1024,1024),Image.LANCZOS).filter(ImageFilter.GaussianBlur(60)).convert('RGBA')
-          bg.save('assets/icon-background.png')
-          fg=Image.new('RGBA',(1024,1024),(0,0,0,0)); s=int(1024*.68)
-          fg.paste(ic.resize((s,s),Image.LANCZOS),((1024-s)//2,(1024-s)//2))
+          def make(scale):
+              s=int(1024*scale); off=(1024-s)//2
+              small=ic.resize((s,s),Image.LANCZOS)
+              canvas=Image.new('RGBA',(1024,1024),(0,0,0,0)); canvas.paste(small,(off,off))
+              a=np.array(canvas)
+              yy,xx=np.mgrid[0:1024,0:1024]
+              dx=xx-511.5; dy=yy-511.5; r=np.hypot(dx,dy)
+              R=s/2*0.96
+              k=np.minimum(1,R/np.maximum(r,1e-6))
+              sx=(511.5+dx*k).round().astype(int).clip(0,1023)
+              sy=(511.5+dy*k).round().astype(int).clip(0,1023)
+              smear=Image.fromarray(a[sy,sx][:,:,:3].astype('uint8')).convert('RGBA').filter(ImageFilter.GaussianBlur(30))
+              full=smear.copy(); full.alpha_composite(canvas)
+              return full,canvas
+          full,fg=make(.72)
+          full.save('assets/icon-background.png')
           fg.save('assets/icon-foreground.png')
-          only=bg.copy(); s2=int(1024*.94)
-          only.alpha_composite(ic.resize((s2,s2),Image.LANCZOS),((1024-s2)//2,(1024-s2)//2))
+          only,_=make(.94)
           only.save('assets/icon-only.png')
           PY3
             npm i --legacy-peer-deps -D @capacitor/assets
@@ -89,14 +86,7 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          if ! ./gradlew assembleDebug --stacktrace; then
-            echo "::warning::build failed with kiosk plugin, retrying without it"
-            cd ..
-            npm rm --legacy-peer-deps @capgo/capacitor-android-kiosk || true
-            npx cap sync android
-            cd android
-            ./gradlew assembleDebug --stacktrace
-          fi
+          ./gradlew assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
           name: app-debug
