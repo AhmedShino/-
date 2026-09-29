@@ -18,7 +18,7 @@ jobs:
         run: |
           mkdir www && cp index.html www/
           npm init -y
-          npm i @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 @capacitor/local-notifications@6 @capgo/capacitor-android-kiosk
+          npm i --legacy-peer-deps @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 @capacitor/local-notifications@6 @capgo/capacitor-android-kiosk
           echo '{"appId":"com.mozakarty.app","appName":"مذاكرتي","webDir":"www"}' > capacitor.config.json
           npx cap add android
           npx cap sync android
