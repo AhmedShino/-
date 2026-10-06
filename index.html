@@ -141,6 +141,13 @@ function vStats(){
 
 document.addEventListener('visibilitychange',()=>{if(document.hidden)stopTest()});
 function render(){
+  if(gater()){
+    const nav = document.querySelector('nav');
+    const header = document.querySelector('header');
+    if(nav) nav.style.display = 'none';
+    if(header) header.style.display = 'none';
+    return;
+  }
   if(!S.profile){
     const nav = document.querySelector('nav');
     const header = document.querySelector('header');
@@ -154,7 +161,7 @@ function render(){
     if(nav) nav.style.display = '';
     if(header) header.style.display = '';
   }
-  if(gater())return;snap();if(S.sw&&!swIv)swRun();
+  snap();if(S.sw&&!swIv)swRun();
  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t==tab));
  $('v').innerHTML=({today:vToday,mat:vMat,plan:vPlan,mist:vMem,stats:()=>vStats()+'<details class="c"><summary><b>🌙 جدول النوم</b></summary>'+vSleep()+'</details><details class="c"><summary><b>🔔 نغمة التنبيه</b></summary>'+vRing()+'</details><details class="c"><summary><b>☁️ المزامنة والنسخ الاحتياطي</b></summary>'+vSync()+'</details>'+vKey(),help:vHelp,wiz:vWiz})[tab]();
  paintHeader();
