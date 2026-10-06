@@ -140,7 +140,8 @@ function vStats(){
  <div class="c"><b>حسب المادة</b>${Object.entries(by).map(([k,v])=>`<div class="r"><div>${esc(k)}</div><span>${v} د</span></div>`).join('')||'<p><small>ابدأ جلسة مذاكرة وهتظهر بياناتك هنا.</small></p>'}</div>`}
 
 document.addEventListener('visibilitychange',()=>{if(document.hidden)stopTest()});
-if(gater()){
+function render(){
+  if(gater()){
     const nav = document.querySelector('nav');
     const header = document.querySelector('header');
     if(nav) nav.style.display = 'none';
