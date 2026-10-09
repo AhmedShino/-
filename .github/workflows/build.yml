@@ -18,6 +18,10 @@ jobs:
         run: |
           test -f index.html || { echo "index.html not found in repo root"; ls -la; exit 1; }
           mkdir -p www && cp index.html www/
+          # لو المشروع مقسّم لملفات (src و assets) انسخهم كمان
+          if [ -d src ]; then cp -r src www/; fi
+          if [ -d assets ]; then cp -r assets www/; fi
+          if grep -q 'src/core.js' index.html && [ ! -f www/src/core.js ]; then echo "src/ folder missing from repo"; exit 1; fi
           npm init -y
           npm i --legacy-peer-deps @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 @capacitor/local-notifications@6
           echo '{"appId":"com.mozakarty.app","appName":"Mozakarty","webDir":"www"}' > capacitor.config.json
