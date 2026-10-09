@@ -21,7 +21,10 @@ jobs:
           # لو المشروع مقسّم لملفات (src و assets) انسخهم كمان
           if [ -d src ]; then cp -r src www/; fi
           if [ -d assets ]; then cp -r assets www/; fi
-          if grep -q 'src/core.js' index.html && [ ! -f www/src/core.js ]; then echo "src/ folder missing from repo"; exit 1; fi
+          # لو الملفات مرفوعة في الصفحة الرئيسية من غير مجلدات
+          if ls ./*.js >/dev/null 2>&1; then cp ./*.js www/; fi
+          if [ -f main.css ]; then cp main.css www/; fi
+          if grep -q 'core.js' index.html && [ ! -f www/core.js ] && [ ! -f www/src/core.js ]; then echo "core.js missing from repo"; exit 1; fi
           npm init -y
           npm i --legacy-peer-deps @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 @capacitor/local-notifications@6
           echo '{"appId":"com.mozakarty.app","appName":"Mozakarty","webDir":"www"}' > capacitor.config.json
