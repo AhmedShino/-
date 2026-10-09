@@ -1,0 +1,16 @@
+{
+  "original_html": "mozakarty-friends-chat-updated.html",
+  "script_order": [
+    "core.js",
+    "timer.js",
+    "study-features.js",
+    "registration.js",
+    "admin.js",
+    "friends-chat.js",
+    "account-cleanup.js",
+    "admin-cleanup-init.js"
+  ],
+  "javascript_character_count": 100135,
+  "concatenation_matches_original": true,
+  "css_character_count": 8056
+}
