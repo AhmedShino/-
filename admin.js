@@ -6,11 +6,11 @@ const ADM_UID='6NEqI6v1M4NLYULR9IK9e3bwTWM2',FBV='10.12.2',CODE_RE=/^MZK-[A-Z0-9
 let ACT=null,ADMF=false,admLogin=false,admOn=false,GMSG='',glv=0,gtBusy=0,gtFail=0,gtLock=0,atp=0,atT=null,lastChk=Date.now();
 try{const a=JSON.parse(localStorage.getItem('mzk_act'));if(a&&typeof a.c==='string'&&typeof a.u==='string')ACT=a}catch(e){}
 try{ADMF=localStorage.getItem('mzk_adm')==='1'}catch(e){}
-const ADM={codes:[],flt:'all',busy:0,err:'',nw:[],ed:'',del:''};
+const ADM={codes:[],reports:[],flt:'all',busy:0,err:'',nw:[],ed:'',del:''};
 const gtOK=()=>!GATE||!!ACT||ADMF;
 let FBMp=null,FBUp=null,FBAp=null;
-function fbMods(){return FBMp||(FBMp=(async()=>{const b='https://www.gstatic.com/firebasejs/'+FBV+'/',[a,au,fs]=await Promise.all([import(b+'firebase-app.js'),import(b+'firebase-auth.js'),import(b+'firebase-firestore.js')]);return{a,au,fs}})().catch(e=>{FBMp=null;throw e}))}
-async function mkApp(name){const m=await fbMods(),app=name?m.a.initializeApp(FBC,name):m.a.initializeApp(FBC);return{m,auth:m.au.getAuth(app),db:m.fs.initializeFirestore(app,{experimentalAutoDetectLongPolling:true})}}
+ function fbMods(){return FBMp||(FBMp=(async()=>{const b='https://www.gstatic.com/firebasejs/'+FBV+'/',[a,au,fs]=await Promise.all([import(b+'firebase-app.js'),import(b+'firebase-auth.js'),import(b+'firebase-firestore.js')]);return{a,au,fs}})().catch(e=>{FBMp=null;throw e}))}
+ async function mkApp(name){const m=await fbMods(),app=name?m.a.initializeApp(FBC,name):m.a.initializeApp(FBC);return{m,auth:m.au.getAuth(app),db:m.fs.initializeFirestore(app,{experimentalAutoDetectLongPolling:true})}}
 function fbUser(){return FBUp||(FBUp=mkApp('').catch(e=>{FBUp=null;throw e}))}
 function fbAdmin(){return FBAp||(FBAp=mkApp('admin').catch(e=>{FBAp=null;throw e}))}
 const authReady=(m,auth)=>new Promise(r=>{let u=null;u=m.au.onAuthStateChanged(auth,x=>{try{u&&u()}catch(e){}r(x)})});
@@ -117,6 +117,7 @@ async function admLoad(){
  ADM.busy=1;ADM.err='';
  try{const U=await fbAdmin(),{fs}=U.m,s=await fs.getDocs(fs.collection(U.db,'codes')),t=x=>x&&x.toMillis?x.toMillis():0;
   ADM.us={};try{const us=await fs.getDocs(fs.collection(U.db,'users'));us.docs.forEach(d=>{ADM.us[d.id]=d.data()})}catch(e){}
+  try{const rs=await fs.getDocs(fs.collection(U.db,'reports'));ADM.reports=rs.docs.map(d=>Object.assign({id:d.id},d.data())).sort((a,b)=>t(b.createdAt)-t(a.createdAt))}catch(e){ADM.reports=[]}
   ADM.codes=s.docs.filter(d=>CODE_RE.test(d.id)).map(d=>{const v=d.data();return{id:d.id,status:v.status||'free',uid:v.uid||'',label:v.label||'',createdAt:t(v.createdAt),usedAt:t(v.usedAt),lastSeen:t(v.lastSeen),leftAt:t(v.leftAt)}}).sort((a,b)=>b.createdAt-a.createdAt||a.id.localeCompare(b.id))
  }catch(e){ADM.err='مقدرتش أحمّل الأكواد. اتأكد من النت ومن قواعد Firestore.'}
  ADM.busy=0;if(tab==='adm'&&admOn)render()}
@@ -160,8 +161,24 @@ function vAdm(){
  <div class="c"><h2>🛠 لوحة المطور</h2><div class="g3">${tile(A.length,'إجمالي الأكواد')}${tile(cn('used'),'مستخدم','ok')}${tile(cn('free'),'لسه مستخدمش')}${tile(cn('left'),'خرج','am')}${tile(cn('disabled'),'معطّل','bad')}${tile(act,'نشط آخر 7 أيام','pr')}</div>${ADM.err?`<p style="color:var(--bad)">${esc(ADM.err)}</p>`:''}<div class="row"><button style="flex:1" onclick="admLoad()">🔄 تحديث</button></div></div>
  <div class="c"><b>➕ اعمل أكواد جديدة</b><div class="row"><input id="agn" type="number" min="1" max="100" value="5" style="width:90px;margin:0"><input id="agl" placeholder="ملاحظة (اختياري)" style="flex:1;margin:0"></div><button class="pr" onclick="admGen()">اعمل الأكواد</button>${ADM.nw.length?`<textarea readonly style="margin-top:8px;direction:ltr;font-family:monospace">${ADM.nw.join('\n')}</textarea><button style="width:100%" onclick="ccopy(ADM.nw.join('\\n'))">📋 نسخ الأكواد الجديدة</button>`:''}</div>
  <div class="c"><b>🔑 الأكواد</b><div class="row">${chips.map(([k,n])=>`<button class="ch ${ADM.flt==k?'on':''}" onclick="ADM.flt='${k}';render()">${n}</button>`).join('')}</div>${cn('free')?`<button style="width:100%;margin-bottom:6px" onclick="admCopyFree()">📋 نسخ كل الأكواد المتاحة (${cn('free')})</button>`:''}${ADM.busy?'<p><small>بيحمّل...</small></p>':''}${fl.map(row).join('')||'<p><small>مفيش أكواد هنا.</small></p>'}</div>
+ ${vReports()}
  ${vOrph()}
  <button class="bad" style="width:100%" onclick="admOut()">🚪 تسجيل خروج المطور</button>`}
+ function reportStatus(r){return r==='new'?'🆕 جديد':r==='in_progress'?'⏳ قيد المراجعة':r==='resolved'?'✅ مغلق':'—'}
+ async function admReportStatus(id,status){try{const U=await fbAdmin(),{fs}=U.m;await fs.updateDoc(fs.doc(U.db,'reports',id),{status,updatedAt:fs.serverTimestamp()});await admLoad()}catch(e){toast('فشل تحديث البلاغ')}}
+function vReports(){
+  const rs=(ADM.reports||[]).slice().sort((a,b)=>(a.status==='resolved')-(b.status==='resolved')||tms(b.createdAt)-tms(a.createdAt)),
+   open=rs.filter(r=>r.status!=='resolved').length,
+   label=r=>r.type==='app_issue'?'🛠 مشكلة تطبيق':r.kind==='user'?'🚩 بلاغ مستخدم':'🚩 بلاغ رسالة',
+   rsn={harassment:'تحرش أو إساءة',spam:'سبام أو إزعاج',unsafe:'محتوى غير مناسب',impersonation:'انتحال شخصية',other:'سبب آخر'};
+  return `<div class="c"><div class="hd" style="justify-content:space-between"><h2>🚩 البلاغات (${open} مفتوح)</h2><button onclick="admLoad()">🔄</button></div>${rs.slice(0,40).map(r=>{
+   const c=r.targetUid?(ADM.codes||[]).find(x=>x.uid===r.targetUid):null,tu=r.targetUsername||(r.targetUid&&(ADM.us||{})[r.targetUid]&&(ADM.us[r.targetUid].username))||'',
+   cf=ADM.rdel===r.id;
+   return `<div class="r" style="display:block${r.status==='resolved'?';opacity:.6':''}"><div><b>${label(r)}</b> <span class="bdg">${reportStatus(r.status)}</span></div><small>${zfdt(tms(r.createdAt))} • من @${esc(r.reporterUsername||'—')}${r.type==='user_report'?` ← ${esc(r.targetName||'')} @${esc(tu)} ${r.chatKind==='group'?'(جروب)':''}`:''} • ${esc(rsn[r.reason]||r.reason||r.issueType||'بدون تصنيف')}</small>${r.description?`<p style="white-space:pre-wrap;word-break:break-word">${esc(r.description)}</p>`:''}${r.messageText?`<p class="c" style="background:var(--bg);white-space:pre-wrap;word-break:break-word"><small>الرسالة:</small><br>${esc(r.messageText)}</p>`:''}${r.context?`<details><summary><small>آخر الرسايل في المحادثة</small></summary><pre style="white-space:pre-wrap;word-break:break-word;font:inherit;font-size:13px">${esc(r.context)}</pre></details>`:''}<div class="rowb"><button onclick="admReportStatus('${esc(r.id)}','in_progress')">قيد المراجعة</button><button class="ok" onclick="admReportStatus('${esc(r.id)}','resolved')">إغلاق</button>${r.targetUid&&c&&c.status==='used'?`<button class="bad" onclick="admAct('${esc(c.id)}','dis')">⛔ عطّل حسابه</button>`:''}${r.targetUid?`<button onclick="admEnter('${esc(r.targetUid)}','${esc(tu)}')">👁 حسابه</button>`:''}<button class="bad" onclick="admReportDel('${esc(r.id)}')">${cf?'متأكد؟':'🗑'}</button></div></div>`}).join('')||'<p><small>مفيش بلاغات.</small></p>'}</div>`}
+async function admReportDel(id){
+ if(ADM.rdel!==id){ADM.rdel=id;render();setTimeout(()=>{if(ADM.rdel===id){ADM.rdel='';if(tab==='adm')render()}},4000);return}
+ ADM.rdel='';
+ try{const U=await fbAdmin(),{fs}=U.m;await fs.deleteDoc(fs.doc(U.db,'reports',id));await admLoad()}catch(e){toast('فشل الحذف')}}
 /* ---- أسماء محجوزة ومفيش حد فيها ---- */
 async function admOrphScan(){
  if(ADM.busy||!ADM.codes.length){ADM.orphm='دوس تحديث الأول عشان الأكواد تتحمّل.';render();return}
@@ -191,26 +208,33 @@ async function admSel(id){
  render();
  try{
   const U=await fbAdmin(),{fs}=U.m,fr=await fs.getDocs(fs.query(fs.collection(U.db,'friendships'),fs.where('m','array-contains',c.uid)));
-  ADM.v={uid:c.uid,frs:fr.docs.map(d=>Object.assign({id:d.id},d.data())),cv:null,ms:[]}
+  const gs=await fs.getDocs(fs.query(fs.collection(U.db,'groups'),fs.where('memberIds','array-contains',c.uid)));
+  ADM.v={uid:c.uid,frs:fr.docs.map(d=>Object.assign({id:d.id},d.data())),groups:gs.docs.map(d=>Object.assign({id:d.id},d.data())),cv:null,gid:'',ms:[]}
  }catch(e){ADM.vm='مقدرتش أحمّل الأصحاب.'}
  if(ADM.sel===id)render()}
-async function admConv(id){
+ async function admConv(id){
  try{
   const U=await fbAdmin(),{fs}=U.m,s=await fs.getDocs(fs.query(fs.collection(U.db,'friendships',id,'messages'),fs.orderBy('createdAt','desc'),fs.limit(200)));
-  ADM.v.cv=id;ADM.v.ms=s.docs.map(d=>d.data()).reverse()
+  ADM.v.cv=id;ADM.v.ms=s.docs.map(d=>Object.assign({id:d.id},d.data())).reverse()
  }catch(e){ADM.vm='مقدرتش أفتح المحادثة'}
  render()}
+ async function admGroup(id){
+  try{const U=await fbAdmin(),{fs}=U.m,s=await fs.getDocs(fs.query(fs.collection(U.db,'groups',id,'messages'),fs.orderBy('createdAt','asc'),fs.limit(300)));ADM.v.gid=id;ADM.v.ms=s.docs.map(d=>Object.assign({id:d.id},d.data()))}
+  catch(e){ADM.vm='مقدرتش أفتح رسائل الجروب'}
+  render()}
 function vDet(c){
  if(!c.uid)return '<div class="c" style="background:var(--bg);margin-top:8px"><small>الكود لسه محدش استخدمه.</small></div>';
  const p=(ADM.us||{})[c.uid],v=ADM.v&&ADM.v.uid===c.uid?ADM.v:null,stl={pending:'⏳ طلب معلّق',accepted:'✅ أصحاب',blocked:'🚫 محظور'};
  let h='<div class="c" style="background:var(--bg);margin-top:8px">';
  h+=p?`<div class="r"><div>الاسم</div><b>${esc(p.name||'')}</b></div><div class="r"><div>العمر</div><span>${esc(p.age||'')} سنة</span></div><div class="r"><div>المرحلة</div><span>${esc(p.stage||'')} • ${esc(p.grade||'')}</span></div>${p.system?`<div class="r"><div>النظام</div><span>${esc(p.system)}</span></div>`:''}${p.branch?`<div class="r"><div>الشعبة / المسار</div><span>${esc(p.branch)}</span></div>`:''}<div class="r"><div>Username</div><span class="cx">@${esc(p.username||'')}</span></div>`:'<p><small>الشخص ده لسه ما سجّلش بياناته.</small></p>';
  h+=`<button class="pr" style="margin-top:8px" onclick="admEnter('${esc(c.uid)}','${esc(p&&p.username||'')}')">👁 ادخل الحساب (مشاهدة فقط)</button>${ADM.vm?`<p style="color:var(--bad)"><small>${esc(ADM.vm)}</small></p>`:''}`;
- if(v){
+  if(v){
   h+=`<p><b>الأصحاب والمحادثات (${v.frs.length})</b></p>`;
   h+=v.frs.map(f=>{const mine=f.from===v.uid,ou=mine?f.ut:f.uf,on=mine?f.nt:f.nf;
-   return `<div class="r" style="display:block"><div><b>${esc(on||'')} @${esc(ou||'')}</b> <span class="bdg">${stl[f.status]||esc(f.status)}</span></div><div class="rowb"><button onclick="admConv('${esc(f.id)}')">📖 افتح الرسايل</button></div>${v.cv===f.id?`<div class="c" style="margin-top:8px;max-height:340px;overflow-y:auto">${v.ms.length?v.ms.map(m=>`<p style="white-space:pre-wrap;word-break:break-word"><b>${m.from===v.uid?'هو':'@'+esc(ou||'')}</b> <small>${zfdt(tms(m.createdAt))}${m.read?' ✓✓':' ✓'}</small><br>${esc(m.text)}</p>`).join(''):'<small>مفيش رسايل.</small>'}</div>`:''}</div>`}).join('')||'<p><small>مفيش أصحاب.</small></p>'
- }
+   return `<div class="r" style="display:block"><div><b>${esc(on||'')} @${esc(ou||'')}</b> <span class="bdg">${stl[f.status]||esc(f.status)}</span></div><div class="rowb"><button onclick="admConv('${esc(f.id)}')">📖 افتح الرسايل</button></div>${v.cv===f.id?`<div class="c" style="margin-top:8px;max-height:340px;overflow-y:auto">${v.ms.length?v.ms.map(m=>`<p style="white-space:pre-wrap;word-break:break-word"><b>${m.from===v.uid?'هو':'@'+esc(ou||'')}</b> <small>${zfdt(tms(m.createdAt))}${m.read?' ✓✓':' ✓'}</small><br>${messageContent(m)}</p>`).join(''):'<small>مفيش رسايل.</small>'}</div>`:''}</div>`}).join('')||'<p><small>مفيش أصحاب.</small></p>'
+  h+=`<p><b>الجروبات (${(v.groups||[]).length})</b></p>`;
+  h+=(v.groups||[]).map(g=>`<div class="r" style="display:block"><div><b>${esc(g.name||'بدون اسم')}</b> <span class="bdg">${(g.memberIds||[]).length} أعضاء</span></div><small>${esc(g.lastText||'')}</small><div class="rowb"><button onclick="admGroup('${esc(g.id)}')">👁 افتح الجروب</button></div>${v.gid===g.id?`<div class="c" style="margin-top:8px;max-height:340px;overflow-y:auto">${v.ms.length?v.ms.map(m=>`<p style="white-space:pre-wrap;word-break:break-word"><b>${esc(m.name||'عضو')}</b> <small>${zfdt(tms(m.createdAt))}</small><br>${messageContent(m)}</p>`).join(''):'<small>مفيش رسايل.</small>'}</div>`:''}</div>`).join('')||'<p><small>مفيش جروبات.</small></p>';
+  }
  return h+'</div>'}
 /* ---- وضع المشاهدة: بيفتح التطبيق ببيانات الطالب، ومفيش حاجة بتتحفظ ولا بتتعدّل ---- */
 var VIEW=0,VBK=null,VU='';
@@ -235,12 +259,12 @@ async function admEnter(uid,un){
   FR=frs.docs.map(d=>Object.assign({id:d.id},d.data({serverTimestamps:'estimate'}))); ME=uid; MSG_ON=true;
   CH=null;CHM=[];stopConv();
   stopTest();clearInterval(iv);iv=null;clearInterval(swIv);swIv=null;
-  VBK={S,run,ME,FR,MSG_ON};VIEW=1;VU=un;S=st;run=null;Q=null;dk=0;ME=uid;FR=[];MSG_ON=true;try{const fq=fs.query(fs.collection(U.db,'friendships'),fs.where('m','array-contains',uid)),fsn=await fs.getDocs(fq);FR=fsn.docs.map(d=>Object.assign({id:d.id},d.data()))}catch(e){}tab='today';applyTheme();render()
+  VBK={S,run,ME,FR,MSG_ON,GR,GR_ON};VIEW=1;VU=un;S=st;run=null;Q=null;dk=0;ME=uid;FR=[];GR=[];GR_ON=1;MSG_ON=true;try{const fq=fs.query(fs.collection(U.db,'friendships'),fs.where('m','array-contains',uid)),fsn=await fs.getDocs(fq);FR=fsn.docs.map(d=>Object.assign({id:d.id},d.data()));const gq=fs.query(fs.collection(U.db,'groups'),fs.where('memberIds','array-contains',uid)),gsn=await fs.getDocs(gq);GR=gsn.docs.map(d=>Object.assign({id:d.id},d.data()))}catch(e){}tab='today';applyTheme();render()
  }catch(e){toast('مقدرتش أفتح الحساب')}}
 function admExit(){
  if(!VIEW)return;
  VIEW=0;clearInterval(swIv);swIv=null;clearInterval(iv);iv=null;
- if(VBK){S=VBK.S;run=VBK.run;ME=VBK.ME;FR=VBK.FR||[];MSG_ON=VBK.MSG_ON||false}
+ if(VBK){S=VBK.S;run=VBK.run;ME=VBK.ME;FR=VBK.FR||[];GR=VBK.GR||[];GR_ON=VBK.GR_ON||false;MSG_ON=VBK.MSG_ON||false}
  VBK=null;Q=null;dk=0;applyTheme();tab='adm';render();admLoad()}
 const vwBanner=()=>`<div id="vwb" class="c warn" style="position:sticky;top:52px;z-index:6;padding:8px 12px;display:flex;align-items:center;gap:8px"><div style="flex:1"><b>👁 وضع المشاهدة</b> <small>@${esc(VU)} • مفيش حاجة بتتحفظ</small></div><button class="bad" onclick="admExit()">خروج ✕</button></div>`;
 ['click','change','input'].forEach(ev=>document.addEventListener(ev,e=>{

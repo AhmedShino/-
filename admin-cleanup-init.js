@@ -9,6 +9,7 @@ async function admPurge(U,uid){
   }
   await fs.deleteDoc(f.ref)
  }
+ try{await groupCleanup(U,fs,uid)}catch(e){}
  const un=ud.exists()?ud.data().username:'';
  if(un)await fs.deleteDoc(fs.doc(U.db,'usernames',un));
  try{await fs.deleteDoc(fs.doc(U.db,'states',uid))}catch(e){}

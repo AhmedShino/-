@@ -68,9 +68,9 @@ function vStats(){
  <div class="c"><b>حسب المادة</b>${Object.entries(by).map(([k,v])=>`<div class="r"><div>${esc(k)}</div><span>${v} د</span></div>`).join('')||'<p><small>ابدأ جلسة مذاكرة وهتظهر بياناتك هنا.</small></p>'}</div>`}
 
 document.addEventListener('visibilitychange',()=>{if(document.hidden)stopTest()});
-function render(){if(gater())return;if(tab!=='chat'&&CH){stopConv();CH=null;CHM=[]}snap();if(S.sw&&!swIv)swRun();
+function render(){if(gater())return;if(tab!=='chat'&&(CH||GR_SEL)){stopConv();CH=null;CHM=[];grmStop();GR_SEL='';GR_VIEW='chat';GR_ERR='';attReset()}snap();if(S.sw&&!swIv)swRun();
  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t==tab));
- $('v').innerHTML=({today:vToday,mat:vMat,plan:vPlan,mist:vMem,stats:()=>vStats()+'<details class="c"><summary><b>🌙 جدول النوم</b></summary>'+vSleep()+'</details><details class="c"><summary><b>🔔 نغمة التنبيه</b></summary>'+vRing()+'</details><details class="c"><summary><b>☁️ المزامنة والنسخ الاحتياطي</b></summary>'+vSync()+'</details>'+vKey(),help:vHelp,wiz:vWiz,chat:vChat})[tab]();if(tab==='chat')chatPost();if(VIEW)$('v').insertAdjacentHTML('afterbegin',vwBanner());
+ $('v').innerHTML=({today:vToday,mat:vMat,plan:vPlan,mist:vMem,stats:()=>vStats()+'<details class="c"><summary><b>🌙 جدول النوم</b></summary>'+vSleep()+'</details><details class="c"><summary><b>🔔 نغمة التنبيه</b></summary>'+vRing()+'</details><details class="c"><summary><b>☁️ المزامنة والنسخ الاحتياطي</b></summary>'+vSync()+'</details>'+vKey(),help:vHelp,wiz:vWiz,chat:vChat})[tab]();if(tab==='chat'){chatPost();groupPost()}if(VIEW)$('v').insertAdjacentHTML('afterbegin',vwBanner());
  paintHeader();
 }
 document.querySelector('nav').onclick=e=>{const t=e.target.dataset.t;if(t){stopTest();tab=t;if(t==='chat')msgInit();render()}};
