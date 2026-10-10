@@ -1,151 +1,47 @@
-/* ===== الجروبات بين الأصحاب =====
-   - الجروب بيتعمل بصاحبه بس، وبعدين بيضيف أعضاء من أصحابه (القواعد بتتأكد إنهم أصحاب فعلاً).
-   - رسايل الجروب: نص + مرفق اختياري (صورة / ملف / ملف حفظ) من attachments.js */
-let GR=[],GR_ON=0,GR_SEL='',GR_VIEW='chat',GRM=[],grUnsub=null,grmUnsub=null,GR_BUSY=0,GR_ERR='',GR_NEW={},GR_F={n:'',d:''},grcf='',grFirst=true,grSendLock=0,grScr=0;
-const gLR=g=>LR['g'+g.id]||0;
-const grUnread=g=>!!g.lastBy&&g.lastBy!==ME&&tms(g.lastAt)>gLR(g);
-const gLetter=g=>esc(String(g.name||'ج').trim().charAt(0).toUpperCase()||'ج');
+/* ===== الجروبات + نقل الإشراف + أرشيف العضو ===== */
+let GR=[],GR_ON=0,GR_SEL='',GR_VIEW='chat',GRM=[],grUnsub=null,grmUnsub=null,GR_BUSY=0,GR_ERR='',GATT=0;
+let GA=[],GA_ON=0,GA_SEL='',GAM=[],gaUnsub=null,gamUnsub=null;
+const gOpen=()=>!!GR_SEL&&GR_SEL!=='create'&&GR_SEL!=='archive';
 const gMem=(g,u)=>(g.members||[]).find(x=>x.uid===u)||{};
-const gMName=(g,u)=>{const m=gMem(g,u);return m.name||(m.username?'@'+m.username:'عضو')};
-const gOpen=()=>!!GR_SEL&&GR_SEL!=='create';
+const gName=(g,u)=>{const m=gMem(g,u);return m.name||(m.username?'@'+m.username:'عضو')};
+const gLetter=g=>esc(String(g.name||'ج').trim().charAt(0).toUpperCase()||'ج');
+const gUnread=g=>!!g.lastBy&&g.lastBy!==ME&&tms(g.lastAt)>=(LR['g'+g.id]||0);
+function groupStop(){try{grUnsub&&grUnsub();grmUnsub&&grmUnsub();gaUnsub&&gaUnsub();gamUnsub&&gamUnsub()}catch(e){}grUnsub=grmUnsub=gaUnsub=gamUnsub=null;GR_ON=0;GA_ON=0;GR=[];GA=[];GRM=[];GAM=[]}
 function grmStop(){try{grmUnsub&&grmUnsub()}catch(e){}grmUnsub=null;GRM=[]}
-function groupStop(){try{grUnsub&&grUnsub()}catch(e){}grUnsub=null;grmStop()}
+function archiveStop(){try{gaUnsub&&gaUnsub();gamUnsub&&gamUnsub()}catch(e){}gaUnsub=gamUnsub=null;GAM=[]}
 async function groupInit(){
- if(GR_ON||!USER||!ME||VIEW)return;
- try{
-  const{U,fs}=await fbx();grFirst=true;
+ if(GR_ON||!USER||!ME||VIEW)return;try{const{U,fs}=await fbx();archiveInit();
   const q=fs.query(fs.collection(U.db,'groups'),fs.where('memberIds','array-contains',ME));
-  grUnsub=fs.onSnapshot(q,sn=>{
-   GR=sn.docs.map(d=>Object.assign({id:d.id},d.data({serverTimestamps:'estimate'})));
-   if(!grFirst)sn.docChanges().forEach(c=>{
-    if(c.doc.metadata.hasPendingWrites)return;
-    const g=Object.assign({id:c.doc.id},c.doc.data());
-    if(c.type==='added'&&g.ownerId!==ME)toast('👥 اتضفت لجروب: '+(g.name||''));
-    else if(c.type==='modified'&&g.lastBy&&g.lastBy!==ME&&(GR_SEL!==g.id||document.hidden))toast('👥 '+(g.name||'جروب')+': رسالة جديدة')});
-   grFirst=false;paintNav();
-   if(gOpen()&&!GR.some(g=>g.id===GR_SEL)){grmStop();GR_SEL='';GR_VIEW='chat';if(tab==='chat')render();return}
-   if(tab==='chat'){if(gOpen()&&GR_VIEW==='info')render();else paintFr()}
-  },()=>{});
-  GR_ON=1
+  grUnsub=fs.onSnapshot(q,sn=>{GR=sn.docs.map(d=>Object.assign({id:d.id},d.data({serverTimestamps:'estimate'})));paintNav();if(tab==='chat'&&!GR_SEL)paintFr()},()=>{});GR_ON=1;
  }catch(e){GR=[]}}
-function vGroups(){
- if(GR_SEL==='create')return vGroupCreate();
- if(GR_SEL)return GR_VIEW==='info'?vGroupInfo():vGroupChat();
- return vGroupList()}
-function vGroupList(){
- const list=GR.slice().sort((a,b)=>tms(b.lastAt||b.createdAt)-tms(a.lastAt||a.createdAt));
- return `<div class="c group-list"><div class="hd" style="justify-content:space-between"><h2>👥 الجروبات <small>${list.length}</small></h2>${!VIEW?'<button onclick="openGroupCreate()">＋ جروب</button>':''}</div>${list.map(g=>{const un=grUnread(g);return `<div class="group-row" onclick="openGroup('${esc(g.id)}')"><div class="group-avatar">${gLetter(g)}</div><div class="friend-main"><div class="friend-name"><b>${esc(g.name||'بدون اسم')}</b>${un?'<span class="unread-dot">جديد</span>':''}</div><small class="friend-preview">${(g.memberIds||[]).length} أعضاء • ${esc(g.lastText||'ابدأوا المذاكرة 👋')}</small></div><div class="friend-meta">${g.lastAt?hmt(tms(g.lastAt)):''}</div></div>`}).join('')||'<div class="empty-group">مفيش جروبات لسه. اعمل جروب وضيف أصحابك.</div>'}</div>`}
-function openGroupCreate(){if(VIEW)return;GR_ERR='';GR_BUSY=0;GR_NEW={};GR_F={n:'',d:''};GR_SEL='create';render()}
-function vGroupCreate(){
- const ac=FR.filter(f=>f.status==='accepted');
- return `<div class="c"><div class="hd" style="justify-content:space-between"><h2>➕ إنشاء جروب</h2><button class="x" onclick="GR_SEL='';render()">✕</button></div><input id="gnm" maxlength="40" placeholder="اسم الجروب (مثلاً: جروب الفيزياء)" value="${esc(GR_F.n)}"><textarea id="gdesc" maxlength="300" placeholder="وصف مختصر (اختياري)">${esc(GR_F.d)}</textarea><b>ضيف من أصحابك (لحد 19)</b>${ac.map(f=>{const p=peer(f);return `<label class="r" style="cursor:pointer"><div><b>${pname(f)}</b><small>@${esc(p.u)}</small></div><input type="checkbox" style="width:auto;margin:0" ${GR_NEW[p.uid]?'checked':''} onchange="GR_NEW['${esc(p.uid)}']=this.checked"></label>`}).join('')||'<p><small>مفيش أصحاب لسه. تقدر تعمل الجروب وتضيف بعدين.</small></p>'}${GR_ERR?`<p style="color:var(--bad)">${esc(GR_ERR)}</p>`:''}<button class="pr" onclick="createGroup()">إنشاء الجروب</button></div>`}
-async function createGroup(){
- if(GR_BUSY||VIEW)return;
- const name=(($('gnm')&&$('gnm').value)||'').trim().slice(0,40),desc=(($('gdesc')&&$('gdesc').value)||'').trim().slice(0,300);
- GR_F={n:name,d:desc};
- if(name.length<2){GR_ERR='اكتب اسم الجروب (حرفين على الأقل).';render();return}
- GR_BUSY=1;GR_ERR='';
- try{
-  const{U,fs}=await fbx(),now=fs.serverTimestamp(),ref=fs.doc(fs.collection(U.db,'groups')),
-   me={uid:ME,name:USER.name||'',username:USER.username||'',role:'owner'};
-  await fs.setDoc(ref,{name,description:desc,ownerId:ME,memberIds:[ME],members:[me],createdAt:now,updatedAt:now});
-  let ids=[ME],ms=[me],fail=0;
-  for(const u of Object.keys(GR_NEW).filter(k=>GR_NEW[k]).slice(0,19)){
-   const f=FR.find(x=>x.status==='accepted'&&peer(x).uid===u);if(!f){fail++;continue}
-   const pi=ids,pm=ms,p=peer(f);
-   try{
-    ids=ids.concat([u]);ms=ms.concat([{uid:u,name:p.n||'',username:p.u||'',role:'member'}]);
-    await fs.updateDoc(ref,{memberIds:ids,members:ms,updatedAt:fs.serverTimestamp()})
-   }catch(e){ids=pi;ms=pm;fail++}}
-  GR_F={n:'',d:''};GR_NEW={};GR_BUSY=0;GR_SEL='';GR_VIEW='chat';render();
-  toast(fail?'اتعمل الجروب، بس '+fail+' ما اتضافوش':'اتعمل الجروب ✓')
- }catch(e){GR_ERR='مقدرتش أعمل الجروب. اتأكد من النت ومن قواعد Firebase.';GR_BUSY=0;render()}}
-async function openGroup(id){
- if(!GR.some(g=>g.id===id))return;
- grmStop();GR_SEL=id;GR_VIEW='chat';grScr=1;grcf='';GR_ERR='';attReset();
- const g0=GR.find(g=>g.id===id);LR['g'+id]=Math.max(Date.now(),tms(g0.lastAt));saveLR();paintNav();render();
- try{
-  const{U,fs}=VIEW?await(async()=>{const A=await fbAdmin();return{U:A,fs:A.m.fs}})():await fbx(),
-   q=fs.query(fs.collection(U.db,'groups',id,'messages'),fs.orderBy('createdAt','desc'),fs.limit(50));
-  grmUnsub=fs.onSnapshot(q,sn=>{
-   if(GR_SEL!==id)return;
-   GRM=sn.docs.map(d=>Object.assign({id:d.id},d.data({serverTimestamps:'estimate'}))).reverse();
-   const l=GRM[GRM.length-1];if(l){LR['g'+id]=Math.max(Date.now(),tms(l.createdAt));saveLR()}
-   paintNav();if(GR_VIEW==='chat')paintGroupMsgs()
-  },()=>toast('مقدرتش أحمّل رسائل الجروب'))
- }catch(e){toast('مقدرتش أفتح الجروب')}}
-function closeGroup(){grmStop();GR_SEL='';GR_VIEW='chat';grcf='';attReset();render()}
-function groupPost(){if(gOpen()&&GR_VIEW==='chat'){paintGroupMsgs();attPaint()}}
-function vGroupChat(){
- const g=GR.find(x=>x.id===GR_SEL);if(!g)return '';
- return `<div class="c group-chat chat-shell"><div class="chat-top"><div class="hd"><button class="x" onclick="closeGroup()">→</button><div class="group-avatar">${gLetter(g)}</div><div class="xpwrap" onclick="GR_VIEW='info';render()" style="cursor:pointer"><b>${esc(g.name)}</b><small style="display:block">${(g.memberIds||[]).length} أعضاء • التفاصيل</small></div></div></div><div class="chat-messages" id="cm"></div>${VIEW?'<div class="view-only"><small>👁 وضع المشاهدة • للعرض فقط</small></div>':vCompose('g')}</div>${vReportPanel()}`}
-function paintGroupMsgs(){
- const b=$('cm');if(!b)return;const near=b.scrollHeight-b.scrollTop-b.clientHeight<80,
-  dd=x=>x?new Date(x).toLocaleDateString('ar-EG',{day:'numeric',month:'long',year:'numeric'}):'';
- b.innerHTML=GRM.length?GRM.map((m,i)=>{
-  const me=m.from===ME,ms=tms(m.createdAt),prev=GRM[i-1],same=prev&&prev.from===m.from&&ms-tms(prev.createdAt)<300000,sep=!i||dd(ms)!==dd(tms(prev.createdAt));
-  return `${sep?`<div class="chat-date">${dd(ms)||'اليوم'}</div>`:''}<div class="msg-line ${me?'mine':'theirs'} ${same?'same':''}"><div class="msg-bubble ${me?'msg-me':'msg-other'}">${!me&&!same?`<div class="gname">${esc(m.name||'عضو')}</div>`:''}${messageContent(m)}<div class="msg-actions">${!me&&!VIEW?`<button onclick="openReportMessage('${esc(GR_SEL)}','${esc(m.id||'')}','${esc(m.from)}','')">🚩 إبلاغ</button>`:''}</div><div class="msg-time">${hmt(ms)}</div></div></div>`}).join(''):'<div style="margin:auto;text-align:center"><div style="font-size:38px">💬</div><b>مفيش رسائل لسه</b><small style="display:block;margin-top:4px">ابدأوا المحادثة 👋</small></div>';
- if(near||grScr){b.scrollTop=b.scrollHeight;if(GRM.length)grScr=0}}
-function sendGroupMsg(){
- if(VIEW)return;
- const el=$('mi');if(!el||!gOpen()||grSendLock)return;
- const text=el.value.trim(),att=ATTP;if(!text&&!att)return;
- if(text.length>1000){toast('الرسالة طويلة (الحد 1000 حرف)');return}
- grSendLock=1;el.value='';ATTP=null;ATTM=0;attPaint();setTimeout(()=>{grSendLock=0},600);
- const id=GR_SEL,nm=USER.name||'';
- fbx().then(({U,fs})=>{
-  const b=fs.writeBatch(U.db),now=fs.serverTimestamp(),msg={from:ME,name:nm,text,createdAt:now};if(att)msg.att=att;
-  b.set(fs.doc(fs.collection(U.db,'groups',id,'messages')),msg);
-  b.update(fs.doc(U.db,'groups',id),{lastBy:ME,lastAt:now,lastText:(nm.split(' ')[0]+': '+(text||attLabel(att))).slice(0,100),updatedAt:now});
-  return b.commit()
- }).catch(()=>{toast('الرسالة ما اتبعتتش');if(att&&!ATTP){ATTP=att;attPaint()}})}
-/* ---- تفاصيل الجروب: الأعضاء، الإضافة، الإزالة، المغادرة، الحذف ---- */
-function vGroupInfo(){
- const g=GR.find(x=>x.id===GR_SEL);if(!g)return '';
- const own=g.ownerId===ME&&!VIEW,cq=(k,a,b)=>grcf===k?b:a,ids=g.memberIds||[],
-  ac=FR.filter(f=>f.status==='accepted'&&!ids.includes(peer(f).uid));
- return `<button style="margin-bottom:10px" onclick="GR_VIEW='chat';render()">← رجوع للمحادثة</button>
- <div class="c"><div class="group-avatar" style="margin:0 auto 8px">${gLetter(g)}</div><h2 style="text-align:center">${esc(g.name||'')}</h2>${g.description?`<p style="text-align:center"><small>${esc(g.description)}</small></p>`:''}${own?`<div class="row"><input id="grn" maxlength="40" value="${esc(g.name||'')}" style="flex:1;margin:0"><button onclick="renameGroup()">حفظ الاسم</button></div>`:''}</div>
- <div class="c"><b>الأعضاء (${ids.length})</b>${ids.map(u=>{const m=gMem(g,u);return `<div class="r"><div class="group-avatar" style="width:36px;height:36px">${esc(String(m.name||m.username||'?').trim().charAt(0).toUpperCase())}</div><div style="flex:1"><b>${esc(gMName(g,u))}</b>${u===g.ownerId?' <span class="bdg">مشرف</span>':''}${u===ME?' <small>(أنت)</small>':''}${m.username?`<small>@${esc(m.username)}</small>`:''}</div>${u!==ME&&!VIEW?`<button onclick="openReportUser('${esc(g.id)}','${esc(u)}','${esc(m.name||'')}','${esc(m.username||'')}')">🚩</button>`:''}${own&&u!==ME?`<button class="bad" onclick="removeFromGroup('${esc(u)}')">${cq('r'+u,'إزالة','متأكد؟')}</button>`:''}</div>`}).join('')}</div>
- ${own&&ac.length&&ids.length<20?`<div class="c"><b>➕ إضافة من أصحابك</b>${ac.map(f=>`<div class="r"><div><b>${pname(f)}</b><small>@${esc(peer(f).u)}</small></div><button class="ok" onclick="addToGroup('${esc(peer(f).uid)}')">إضافة</button></div>`).join('')}</div>`:''}
- ${VIEW?'':own?`<button class="bad" style="width:100%" onclick="deleteGroup()">${cq('del','🗑 احذف الجروب','متأكد؟ هيتمسح بكل رسايله')}</button>`:`<button class="bad" style="width:100%" onclick="leaveGroup()">${cq('lv','🚪 اترك الجروب','متأكد؟ اضغط تاني')}</button>`}${vReportPanel()}`}
-function grArm(k){grcf=k;render();setTimeout(()=>{if(grcf===k){grcf='';if(tab==='chat'&&gOpen()&&GR_VIEW==='info')render()}},4000)}
-async function grUpd(data,okMsg){
- try{const{U,fs}=await fbx();await fs.updateDoc(fs.doc(U.db,'groups',GR_SEL),Object.assign({updatedAt:fs.serverTimestamp()},data));if(okMsg)toast(okMsg);return true}
- catch(e){toast('فشلت العملية');return false}}
-async function addToGroup(u){
- const g=GR.find(x=>x.id===GR_SEL),f=FR.find(x=>x.status==='accepted'&&peer(x).uid===u);
- if(!g||!f||g.ownerId!==ME||(g.memberIds||[]).length>=20||(g.memberIds||[]).includes(u))return;
- const p=peer(f);
- await grUpd({memberIds:(g.memberIds||[]).concat([u]),members:(g.members||[]).concat([{uid:u,name:p.n||'',username:p.u||'',role:'member'}])},'اتضاف ✓')}
-async function removeFromGroup(u){
- if(grcf!=='r'+u){grArm('r'+u);return}grcf='';
- const g=GR.find(x=>x.id===GR_SEL);if(!g||g.ownerId!==ME||u===ME)return;
- await grUpd({memberIds:(g.memberIds||[]).filter(x=>x!==u),members:(g.members||[]).filter(x=>x.uid!==u)},'اتشال من الجروب')}
-async function leaveGroup(){
- if(grcf!=='lv'){grArm('lv');return}grcf='';
- const g=GR.find(x=>x.id===GR_SEL);if(!g||g.ownerId===ME)return;
- if(await grUpd({memberIds:(g.memberIds||[]).filter(x=>x!==ME),members:(g.members||[]).filter(x=>x.uid!==ME)},'خرجت من الجروب')){grmStop();GR_SEL='';GR_VIEW='chat';render()}}
-async function renameGroup(){
- const n=(($('grn')&&$('grn').value)||'').trim().slice(0,40);
- if(n.length<2){toast('الاسم قصير');return}
- await grUpd({name:n},'اتغير الاسم ✓')}
-async function deleteGroup(){
- if(grcf!=='del'){grArm('del');return}grcf='';
- const id=GR_SEL;
- try{const{U,fs}=await fbx();await groupWipe(U,fs,id);toast('اتحذف الجروب')}catch(e){toast('فشل الحذف')}}
-async function groupWipe(U,fs,id){
- for(let k=0;k<60;k++){
-  const s=await fs.getDocs(fs.query(fs.collection(U.db,'groups',id,'messages'),fs.limit(300)));
-  if(s.empty)break;
-  const b=fs.writeBatch(U.db);s.docs.forEach(d=>b.delete(d.ref));await b.commit()}
- await fs.deleteDoc(fs.doc(U.db,'groups',id))}
-/* لما حساب يخرج أو المطور يمسحه: يمسح الجروبات اللي هو صاحبها، ويطلع من الباقي */
-async function groupCleanup(U,fs,uid){
- let s;try{s=await fs.getDocs(fs.query(fs.collection(U.db,'groups'),fs.where('memberIds','array-contains',uid)))}catch(e){return}
- for(const d of s.docs){
-  const g=d.data();
-  try{
-   if(g.ownerId===uid)await groupWipe(U,fs,d.id);
-   else await fs.updateDoc(d.ref,{memberIds:(g.memberIds||[]).filter(x=>x!==uid),members:(g.members||[]).filter(x=>x.uid!==uid),updatedAt:fs.serverTimestamp()})
-  }catch(e){}}}
+async function archiveInit(){
+ if(GA_ON||!USER||!ME||VIEW)return;try{const{U,fs}=await fbx(),q=fs.collection(U.db,'groupArchives',ME,'items');
+  gaUnsub=fs.onSnapshot(q,sn=>{GA=sn.docs.map(d=>Object.assign({id:d.id},d.data({serverTimestamps:'estimate'}))).sort((a,b)=>tms(b.archivedAt)-tms(a.archivedAt));if(GR_SEL==='archive')render()},()=>{});GA_ON=1;
+ }catch(e){GA=[]}}
+function vGroups(){if(GR_SEL==='create')return vGroupCreate();if(GR_SEL==='archive')return GA_SEL?vArchiveChat():vArchiveList();if(gOpen())return GR_VIEW==='info'?vGroupInfo():vGroupChat();return vGroupList()}
+function vGroupList(){const list=(GR||[]).slice().sort((a,b)=>tms(b.lastAt||b.createdAt)-tms(a.lastAt||a.createdAt));return `<div class="c group-list"><div class="hd" style="justify-content:space-between"><h2>👥 الجروبات <small>${list.length}</small></h2>${!VIEW?'<button onclick="openGroupCreate()">＋ جروب</button>':''}</div>${list.map(g=>`<div class="group-row" onclick="openGroup('${esc(g.id)}')"><div class="group-avatar">${gLetter(g)}</div><div class="friend-main"><div class="friend-name"><b>${esc(g.name||'بدون اسم')}</b>${gUnread(g)?'<span class="unread-dot">جديد</span>':''}</div><small class="friend-preview">${(g.memberIds||[]).length} أعضاء • ${esc(g.lastText||'ابدأوا المذاكرة 👋')}</small></div><div class="friend-meta">${g.lastAt?hmt(tms(g.lastAt)):''}</div></div>`).join('')||'<div class="empty-group">مفيش جروبات لسه.</div>'}<button class="secondary" style="width:100%;margin-top:8px" onclick="openArchives()">📦 أرشيف الجروبات (${GA.length})</button></div>`}
+function openGroupCreate(){if(VIEW)return;GR_ERR='';GR_BUSY=0;GR_SEL='create';render()}
+function vGroupCreate(){return `<div class="c"><div class="hd" style="justify-content:space-between"><h2>➕ إنشاء جروب</h2><button class="x" onclick="GR_SEL='';render()">✕</button></div><input id="gnm" maxlength="60" placeholder="اسم الجروب"><textarea id="gdesc" maxlength="300" placeholder="وصف مختصر (اختياري)"></textarea>${GR_ERR?`<p style="color:var(--bad)">${esc(GR_ERR)}</p>`:''}<button class="pr" onclick="createGroup()">إنشاء الجروب</button></div>`}
+async function createGroup(){if(GR_BUSY||VIEW)return;const name=(($('gnm')&&$('gnm').value)||'').trim(),desc=(($('gdesc')&&$('gdesc').value)||'').trim();if(name.length<2){GR_ERR='اكتب اسم الجروب.';render();return}GR_BUSY=1;try{const{U,fs}=await fbx(),now=fs.serverTimestamp(),ref=fs.doc(fs.collection(U.db,'groups')),me={uid:ME,name:USER.name||'',username:USER.username||'',role:'owner',joinedAt:Date.now()};await fs.setDoc(ref,{name,description:desc,ownerId:ME,memberIds:[ME],members:[me],createdAt:now,updatedAt:now,lastText:'',lastAt:now});GR_SEL=ref.id;toast('اتعمل الجروب ✓');render()}catch(e){GR_ERR='مقدرتش أعمل الجروب. اتأكد من قواعد Firebase.';GR_BUSY=0;render()}}
+async function openGroup(id){if(!GR.some(g=>g.id===id))return;grmStop();GR_SEL=id;GR_VIEW='chat';GR_ERR='';const g=GR.find(x=>x.id===id);LR['g'+id]=Math.max(Date.now(),tms(g.lastAt));try{const{U,fs}=VIEW?await fbAdmin():await fbx(),q=fs.query(fs.collection(U.db,'groups',id,'messages'),fs.orderBy('createdAt','asc'),fs.limit(300));grmUnsub=fs.onSnapshot(q,sn=>{GRM=sn.docs.map(d=>Object.assign({id:d.id},d.data()));paintGroupMsgs()},()=>toast('مقدرتش أحمّل رسائل الجروب'));render()}catch(e){toast('مقدرتش أفتح الجروب')}}
+function closeGroup(){grmStop();GR_SEL='';GR_VIEW='chat';render()}
+function vGroupChat(){const g=GR.find(x=>x.id===GR_SEL);if(!g)return '';return `<div class="c group-chat"><div class="chat-top"><div class="hd"><button class="x" onclick="closeGroup()">→</button><div class="group-avatar">${gLetter(g)}</div><div class="xpwrap" onclick="GR_VIEW='info';render()" style="cursor:pointer"><b>${esc(g.name)}</b><small style="display:block">${(g.memberIds||[]).length} أعضاء • التفاصيل</small></div>${!VIEW&&g.ownerId===ME?`<button class="x" onclick="inviteGroup('${esc(g.id)}')">＋</button>`:''}</div></div><div class="group-messages" id="gm"></div>${VIEW?'<div class="view-only"><small>👁 وضع المشاهدة • للعرض فقط</small></div>':`<div class="chat-compose"><button class="x" onclick="openGroupAttachment()">✦</button><textarea id="gmi" maxlength="1000" placeholder="اكتب رسالة..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendGroupMsg()}"></textarea><button class="pr" onclick="sendGroupMsg()">➤</button></div>${GATT?groupAttachmentPicker():''}`}</div>${vReportPanel()}`}
+function paintGroupMsgs(){const b=$('gm');if(!b)return;b.innerHTML=GRM.length?GRM.map(m=>`<div class="group-msg"><small><b>${esc(m.name||'عضو')}</b> • ${hmt(tms(m.createdAt))}</small><div>${messageContent(m)}${!VIEW&&m.from!==ME?`<div class="msg-actions"><button onclick="openReportMessage('${esc(GR_SEL)}','${esc(m.id||'')}','${esc(m.from)}','')">🚩 إبلاغ</button></div>`:''}</div></div>`).join(''):'<div class="empty-group">مفيش رسائل لسه.</div>';b.scrollTop=b.scrollHeight}
+async function sendGroupMsg(){if(VIEW)return;const el=$('gmi'),text=(el&&el.value||'').trim();if(!text||GR_BUSY)return;GR_BUSY=1;try{const{U,fs}=await fbx(),now=fs.serverTimestamp();await fs.addDoc(fs.collection(U.db,'groups',GR_SEL,'messages'),{from:ME,name:USER.name||USER.username||'عضو',text,createdAt:now});await fs.updateDoc(fs.doc(U.db,'groups',GR_SEL),{lastBy:ME,lastAt:now,lastText:text.slice(0,100),updatedAt:now});el.value=''}catch(e){toast('الرسالة ما اتبعتتش')}GR_BUSY=0}
+async function inviteGroup(id){if(VIEW)return;const u=(prompt('اكتب username الصديق لإضافته')||'').trim().replace(/^@/,'').toLowerCase();if(!/^[a-z0-9_]{3,30}$/.test(u))return;try{const{U,fs}=await fbx(),s=await fs.getDoc(fs.doc(U.db,'usernames',u));if(!s.exists()){toast('الاسم مش موجود');return}const uid=s.data().uid,g=GR.find(x=>x.id===id);if(!g||g.ownerId!==ME||g.memberIds.includes(uid)||g.memberIds.length>=20){toast('لا يمكن إضافة العضو');return}const p=await fs.getDoc(fs.doc(U.db,'users',uid)),d=p.exists()?p.data():{},members=(g.members||[]).concat([{uid,name:d.name||'',username:u,role:'member',joinedAt:Date.now()}]);await fs.updateDoc(fs.doc(U.db,'groups',id),{memberIds:g.memberIds.concat([uid]),members,updatedAt:fs.serverTimestamp()});toast('اتضاف للجروب ✓')}catch(e){toast('مقدرتش أضيف العضو')}}
+function groupAttachmentPicker(){const items=(S.dk||[]).flatMap(d=>(d.cards||[]).slice(0,60).map(c=>`<button class="saved-file" onclick="sendGroupSavedCard('${esc(d.n||'ملفات الحفظ')}','${esc(c.f||'')}','${esc(c.b||'')}')"><b>✦ ${esc(c.f||'بطاقة')}</b><small>${esc(d.n||'ملفات الحفظ')}</small></button>`)).join('');return `<div class="attach-sheet"><div class="c"><div class="hd" style="justify-content:space-between"><h2>✦ مشاركة من ملفات الحفظ</h2><button class="x" onclick="GATT=0;render()">✕</button></div>${items||'<div class="empty-group">لسه مفيش بطاقات محفوظة.</div>'}</div></div>`}
+function openGroupAttachment(){GATT=1;render()}
+async function sendGroupSavedCard(deck,front,back){if(!GR_SEL||VIEW)return;try{const{U,fs}=await fbx(),now=fs.serverTimestamp();await fs.addDoc(fs.collection(U.db,'groups',GR_SEL,'messages'),{from:ME,name:USER.name||USER.username||'عضو',text:`✦ ${deck}\n${front}\n${back}`,attachment:{name:deck+' - '+front,type:'saved_card'},createdAt:now});GATT=0;toast('اتبعت البطاقة ✓')}catch(e){toast('مقدرتش أبعت البطاقة')}}
+function oldestMember(g,removeUid){const ms=(g.members||[]).filter(m=>m.uid!==removeUid&&(g.memberIds||[]).includes(m.uid));return ms.sort((a,b)=>(Number(a.joinedAt)||0)-(Number(b.joinedAt)||0))[0]||null}
+function memberPayload(g,removeUid,newOwner){const ids=(g.memberIds||[]).filter(x=>x!==removeUid),ms=(g.members||[]).filter(m=>m.uid!==removeUid).map(m=>Object.assign({},m,{role:m.uid===newOwner?'owner':(m.role==='owner'?'member':m.role)}));return{memberIds:ids,members:ms,ownerId:newOwner||g.ownerId,updatedAt:null}}
+async function archiveGroupForUser(U,fs,g,uid,reason){const aid=g.id+'_'+uid+'_'+Date.now(),now=fs.serverTimestamp();const qs=await fs.getDocs(fs.query(fs.collection(U.db,'groups',g.id,'messages'),fs.orderBy('createdAt','asc'),fs.limit(300)));const b=fs.writeBatch(U.db),parent=fs.doc(U.db,'groupArchives',uid,'items',aid);b.set(parent,{archiveId:aid,groupId:g.id,groupName:g.name||'',memberUid:uid,reason,archivedAt:now,members:g.members||[],messageCount:qs.size});qs.docs.forEach(d=>b.set(fs.doc(U.db,'groupArchives',uid,'items',aid,'messages',d.id),Object.assign({id:d.id},d.data())));await b.commit()}
+async function updateGroupAfterExit(U,fs,g,uid,reason){const remaining=(g.memberIds||[]).filter(x=>x!==uid);if(!remaining.length){await groupWipe(U,fs,g.id);return}const newOwner=g.ownerId===uid?oldestMember(g,uid):null;const p=memberPayload(g,uid,newOwner&&newOwner.uid);p.updatedAt=fs.serverTimestamp();await fs.updateDoc(fs.doc(U.db,'groups',g.id),p)}
+async function groupWipe(U,fs,id){for(let k=0;k<60;k++){const s=await fs.getDocs(fs.query(fs.collection(U.db,'groups',id,'messages'),fs.limit(300)));if(s.empty)break;const b=fs.writeBatch(U.db);s.docs.forEach(d=>b.delete(d.ref));await b.commit()}await fs.deleteDoc(fs.doc(U.db,'groups',id))}
+async function leaveGroup(){const g=GR.find(x=>x.id===GR_SEL);if(!g||VIEW)return;if(g.ownerId===ME&&g.memberIds.length>1){const n=oldestMember(g,ME);if(!n){toast('مفيش عضو يستلم الإشراف');return}}try{const{U,fs}=await fbx();await archiveGroupForUser(U,fs,g,ME,'left');await updateGroupAfterExit(U,fs,g,ME,'left');closeGroup();toast('خرجت واتحفظ الأرشيف ✓')}catch(e){toast('مقدرتش أخرج من الجروب')}}
+async function removeFromGroup(uid){const g=GR.find(x=>x.id===GR_SEL);if(!g||VIEW||g.ownerId!==ME||uid===ME)return;try{const{U,fs}=await fbx();await archiveGroupForUser(U,fs,g,uid,'removed');await updateGroupAfterExit(U,fs,g,uid,'removed');toast('اتشال العضو واتحفظ أرشيفه ✓');render()}catch(e){toast('فشل إخراج العضو')}}
+function vGroupInfo(){const g=GR.find(x=>x.id===GR_SEL);if(!g)return '';const own=g.ownerId===ME&&!VIEW;return `<button onclick="GR_VIEW='chat';render()">← رجوع للمحادثة</button><div class="c"><div class="group-avatar" style="margin:auto">${gLetter(g)}</div><h2 style="text-align:center">${esc(g.name)}</h2><small style="display:block;text-align:center">المشرف: ${esc(gName(g,g.ownerId))}</small></div><div class="c"><b>الأعضاء (${g.memberIds.length})</b>${g.memberIds.map(uid=>{const m=gMem(g,uid);return `<div class="r"><div class="group-avatar" style="width:36px;height:36px">${esc(String(m.name||m.username||'?').charAt(0))}</div><div style="flex:1"><b>${esc(gName(g,uid))}</b>${uid===g.ownerId?' <span class="bdg">مشرف</span>':''}</div>${own&&uid!==ME?`<button class="bad" onclick="removeFromGroup('${esc(uid)}')">طرد</button>`:''}</div>`}).join('')}</div>${VIEW?'':`<button class="bad" style="width:100%" onclick="leaveGroup()">🚪 خروج من الجروب</button>`}`}
+async function openArchives(){archiveStop();GR_SEL='archive';GA_SEL='';try{const{U,fs}=await fbx(),q=fs.collection(U.db,'groupArchives',ME,'items');gaUnsub=fs.onSnapshot(q,sn=>{GA=sn.docs.map(d=>Object.assign({id:d.id},d.data())).sort((a,b)=>tms(b.archivedAt)-tms(a.archivedAt));render()},()=>{});render()}catch(e){toast('مقدرتش أفتح الأرشيف')}}
+function vArchiveList(){return `<div class="c"><div class="hd" style="justify-content:space-between"><h2>📦 أرشيف الجروبات</h2><button class="x" onclick="GR_SEL='';archiveStop();render()">✕</button></div>${GA.map(a=>`<div class="group-row" onclick="openArchive('${esc(a.id)}')"><div class="group-avatar">📦</div><div class="friend-main"><b>${esc(a.groupName||'جروب قديم')}</b><small>${a.reason==='removed'?'تم إخراجك':'خرجت من الجروب'} • ${a.messageCount||0} رسالة</small></div></div>`).join('')||'<div class="empty-group">مفيش أرشيف لسه.</div>'}</div>`}
+async function openArchive(id){archiveStop();GA_SEL=id;try{const{U,fs}=await fbx(),q=fs.query(fs.collection(U.db,'groupArchives',ME,'items',id,'messages'),fs.orderBy('createdAt','asc'),fs.limit(300));gamUnsub=fs.onSnapshot(q,sn=>{GAM=sn.docs.map(d=>Object.assign({id:d.id},d.data()));render()},()=>{});render()}catch(e){toast('مقدرتش أفتح الأرشيف')}}
+function vArchiveChat(){const a=GA.find(x=>x.id===GA_SEL);return `<div class="c"><button onclick="GA_SEL='';openArchives()">← رجوع للأرشيف</button><h2>📦 ${esc(a&&a.groupName||'جروب قديم')}</h2><small>الأرشيف للقراءة فقط — يمكنك الإبلاغ عن رسالة.</small><div class="group-messages">${GAM.map(m=>`<div class="group-msg"><small><b>${esc(m.name||'عضو')}</b> • ${hmt(tms(m.createdAt))}</small><div>${messageContent(m)}<div class="msg-actions"><button onclick="openReportArchive('${esc(GA_SEL)}','${esc(m.id||'')}','${esc(m.from||'')}')">🚩 إبلاغ</button></div></div></div>`).join('')||'<div class="empty-group">مفيش رسائل.</div>'}</div></div>`}
+async function groupCleanup(U,fs,uid){let s;try{s=await fs.getDocs(fs.query(fs.collection(U.db,'groups'),fs.where('memberIds','array-contains',uid)))}catch(e){return}for(const d of s.docs){const g=Object.assign({id:d.id},d.data());try{await archiveGroupForUser(U,fs,g,uid,'account_deleted');await updateGroupAfterExit(U,fs,g,uid,'account_deleted')}catch(e){}}}

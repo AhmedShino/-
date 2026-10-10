@@ -1,0 +1,197 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    /* عدّل هذا المعرّف إذا تغيّر حساب المطور */
+    function isAdmin() {
+      return request.auth != null && request.auth.uid == '6NEqI6v1M4NLYULR9IK9e3bwTWM2';
+    }
+    function signedIn() { return request.auth != null; }
+    function active() {
+      return signedIn() && exists(/databases/$(database)/documents/codes/$(request.auth.uid));
+    }
+    function self(uid) { return signedIn() && request.auth.uid == uid; }
+    function groupMember(gid) {
+      return signedIn() && request.auth.uid in get(/databases/$(database)/documents/groups/$(gid)).data.memberIds;
+    }
+
+    /* أكواد الدعوة: المستخدم يحتاج قراءة الكود والمطالبة به، والمطور يديرها */
+    match /codes/{code} {
+      allow get: if signedIn() || isAdmin();
+      allow list: if isAdmin();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin()
+        || (signedIn()
+          && resource.data.status == 'free'
+          && request.resource.data.status == 'used'
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','uid','usedAt','lastSeen']))
+        || (signedIn()
+          && resource.data.uid == request.auth.uid
+          && request.resource.data.status == 'left'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','leftAt']));
+    }
+
+    /* الملف الشخصي */
+    match /users/{uid} {
+      allow get: if isAdmin() || self(uid);
+      allow list: if isAdmin();
+      allow create: if self(uid) && request.resource.data.uid == uid;
+      allow update: if isAdmin() || (self(uid) && request.resource.data.uid == uid);
+      allow delete: if isAdmin() || self(uid);
+    }
+
+    /* بحث username */
+    match /usernames/{username} {
+      allow get: if signedIn();
+      allow list: if isAdmin();
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid
+        && request.resource.data.username == username;
+      allow delete: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow update: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+    }
+
+    /* حالة المذاكرة المخزنة على الجهاز/السحابة */
+    match /states/{uid} {
+      allow get, create, update, delete: if isAdmin() || self(uid);
+      allow list: if isAdmin();
+    }
+    match /data/users/{uid}/{document=**} {
+      allow read, write: if isAdmin() || self(uid);
+    }
+
+    /* الصداقة والمحادثات الفردية */
+    match /friendships/{fid} {
+      function member() { return signedIn() && request.auth.uid in resource.data.m; }
+      function newMember() { return signedIn() && request.auth.uid in request.resource.data.m; }
+      allow get, list: if isAdmin() || member() || newMember();
+      allow create: if signedIn() && newMember()
+        && request.resource.data.m is list
+        && request.resource.data.m.size() == 2
+        && request.resource.data.status in ['pending','accepted']
+        && request.resource.data.from is string
+        && request.resource.data.to is string;
+      allow update: if isAdmin() || (member() && request.resource.data.m == resource.data.m
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','updatedAt','lastBy','lastAt','lastText','uf','nf','ut','nt']));
+      allow delete: if isAdmin() || member();
+
+      match /messages/{mid} {
+        allow read: if isAdmin() || member();
+        allow create: if member() && request.resource.data.from == request.auth.uid
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.keys().hasOnly(['from','text','createdAt','read','attachment'])
+          && request.resource.data.text is string
+          && request.resource.data.text.size() <= 1000;
+        allow update: if member()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+          && request.resource.data.read is bool;
+        allow delete: if isAdmin() || (member() && resource.data.from == request.auth.uid);
+      }
+      match /typing/{uid} {
+        allow read, write: if isAdmin() || (member() && self(uid));
+      }
+    }
+
+    /* الجروبات */
+    match /groups/{gid} {
+      function member() { return signedIn() && request.auth.uid in resource.data.memberIds; }
+      function newMember() { return signedIn() && request.auth.uid in request.resource.data.memberIds; }
+      allow get, list: if isAdmin() || member();
+      allow create: if signedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.memberIds.size() == 1
+        && request.resource.data.memberIds[0] == request.auth.uid
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 2
+        && request.resource.data.name.size() <= 60;
+      allow update: if isAdmin()
+        || (member() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastText','lastAt','updatedAt']))
+        || (member() && resource.data.ownerId == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds','members','updatedAt']))
+        || (member() && !(request.auth.uid in request.resource.data.memberIds)
+          && request.resource.data.memberIds.size() == resource.data.memberIds.size() - 1
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds','members','updatedAt']))
+        // نقل الإشراف في نفس تحديث خروج المشرف القديم.
+        || (resource.data.ownerId == request.auth.uid
+          && !(request.auth.uid in request.resource.data.memberIds)
+          && request.resource.data.ownerId in request.resource.data.memberIds
+          && request.resource.data.memberIds.size() == resource.data.memberIds.size() - 1
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ownerId','memberIds','members','updatedAt']));
+      allow delete: if isAdmin() || (member() && resource.data.ownerId == request.auth.uid && resource.data.memberIds.size() == 1);
+
+      match /messages/{mid} {
+        function gm() { return isAdmin() || groupMember(gid); }
+        allow read: if gm();
+        allow create: if gm() && !isAdmin()
+          && request.resource.data.from == request.auth.uid
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.text is string
+          && request.resource.data.text.size() <= 1000;
+        allow delete: if isAdmin() || (gm() && resource.data.from == request.auth.uid);
+      }
+    }
+
+    /* أرشيف خاص بكل عضو: صاحبه يقرأه ويبلغ منه، ولا يعدله أو يحذفه */
+    match /groupArchives/{uid}/items/{archiveId} {
+      allow get, list: if isAdmin() || self(uid);
+      allow create: if isAdmin()
+        || (self(uid) && request.resource.data.memberUid == uid)
+        || (signedIn()
+          && request.resource.data.memberUid == uid
+          && exists(/databases/$(database)/documents/groups/$(request.resource.data.groupId))
+          && get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.ownerId == request.auth.uid);
+      allow update, delete: if isAdmin();
+      match /messages/{mid} {
+        allow get, list: if isAdmin() || self(uid);
+        allow create: if isAdmin() || (self(uid) && request.resource.data.from is string)
+          || (signedIn()
+            && getAfter(/databases/$(database)/documents/groupArchives/$(uid)/items/$(archiveId)).data.groupId is string
+            && get(/databases/$(database)/documents/groups/$(getAfter(/databases/$(database)/documents/groupArchives/$(uid)/items/$(archiveId)).data.groupId)).data.ownerId == request.auth.uid
+            && request.resource.data.from is string);
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    /* البلاغات */
+    match /reports/{reportId} {
+      function reportBase() {
+        return signedIn()
+          && request.resource.data.reporterUid == request.auth.uid
+          && request.resource.data.status == 'new'
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.updatedAt == request.time;
+      }
+      allow create: if reportBase()
+        && request.resource.data.type == 'user_report'
+        && request.resource.data.kind in ['message','user']
+        && request.resource.data.targetUid is string
+        && (request.resource.data.targetUid == '' || request.resource.data.targetUid != request.auth.uid)
+        && request.resource.data.reason is string
+        && request.resource.data.reason.size() >= 2
+        && request.resource.data.reason.size() <= 40
+        && request.resource.data.description is string
+        && request.resource.data.description.size() <= 1000
+        && request.resource.data.chatKind in ['dm','group','archive']
+        && request.resource.data.archiveId is string
+        && request.resource.data.messageText is string
+        && request.resource.data.messageText.size() <= 500
+        && request.resource.data.context is string
+        && request.resource.data.context.size() <= 4000;
+      allow create: if reportBase()
+        && request.resource.data.type == 'app_issue'
+        && request.resource.data.issueType is string
+        && request.resource.data.issueType.size() >= 2
+        && request.resource.data.issueType.size() <= 30
+        && request.resource.data.description is string
+        && request.resource.data.description.size() >= 10
+        && request.resource.data.description.size() <= 1500;
+      allow get, list: if isAdmin() || (signedIn() && resource.data.reporterUid == request.auth.uid);
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','updatedAt'])
+        && request.resource.data.status in ['new','in_progress','resolved'];
+      allow delete: if isAdmin();
+    }
+
+    /* منع أي مسارات غير معرّفة */
+    match /{document=**} { allow read, write: if false; }
+  }
+}

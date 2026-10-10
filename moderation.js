@@ -1,17 +1,12 @@
 /* ===== البلاغات: رسائل/مستخدمين + مشاكل التطبيق ===== */
-const MOD={open:0,kind:'message',friendId:'',messageId:'',targetUid:'',targetName:'',targetUsername:'',reason:'',desc:'',busy:0,err:'',chatKind:'dm',messageText:'',context:''};
+const MOD={open:0,kind:'message',friendId:'',messageId:'',targetUid:'',targetName:'',targetUsername:'',reason:'',desc:'',busy:0,err:'',chatKind:'dm',archiveId:'',messageText:'',context:''};
 const ISSUE={busy:0,err:''};
 const REPORT_REASONS=[['harassment','تحرش أو إساءة'],['spam','سبام أو إزعاج'],['unsafe','محتوى غير مناسب'],['impersonation','انتحال شخصية'],['other','سبب آخر']];
-const reportReset=()=>Object.assign(MOD,{open:0,kind:'message',friendId:'',messageId:'',targetUid:'',targetName:'',targetUsername:'',reason:'',desc:'',busy:0,err:'',chatKind:'dm',messageText:'',context:''});
-/* دليل البلاغ: نص الرسالة المبلَّغ عنها + آخر 10 رسايل في المحادثة (لقطة وقت البلاغ) */
-function repCtx(mid){
- const g=gOpen(),arr=g?GRM:CHM,f=g?null:FR.find(x=>x.id===CH);
- const nm=m=>m.from===ME?(USER.name||'أنا'):(g?(m.name||'عضو'):(f?(peer(f).n||('@'+peer(f).u)):'هو'));
- const line=m=>'['+hmt(tms(m.createdAt))+'] '+nm(m)+': '+(m.text||attLabel(m.att)||'');
- const msg=mid?arr.find(x=>x.id===mid):null;
- return{chatKind:g?'group':'dm',messageText:msg?String(msg.text||attLabel(msg.att)||'').slice(0,500):'',context:arr.slice(-10).map(line).join('\n').slice(0,4000)}}
-function openReportMessage(fid,mid,uid,un){Object.assign(MOD,{open:1,kind:'message',friendId:fid,messageId:mid,targetUid:uid,targetUsername:un||'',reason:'',desc:'',err:''},repCtx(mid));render()}
-function openReportUser(fid,uid,n,u){Object.assign(MOD,{open:1,kind:'user',friendId:fid,messageId:'',targetUid:uid,targetName:n||'',targetUsername:u||'',reason:'',desc:'',err:''},repCtx(''));render()}
+const reportReset=()=>Object.assign(MOD,{open:0,kind:'message',friendId:'',messageId:'',targetUid:'',targetName:'',targetUsername:'',reason:'',desc:'',busy:0,err:'',chatKind:'dm',archiveId:'',messageText:'',context:''});
+function reportContext(mid,kind){const arr=kind==='archive'?GAM:(kind==='group'?GRM:CHM),m=arr.find(x=>x.id===mid),line=x=>'['+hmt(tms(x.createdAt))+'] '+(x.name||'عضو')+': '+(x.text||'');return{messageText:m?String(m.text||'').slice(0,500):'',context:arr.slice(-10).map(line).join('\n').slice(0,4000)}}
+function openReportMessage(fid,mid,uid,un){const kind=gOpen()?'group':'dm';Object.assign(MOD,{open:1,kind:'message',friendId:fid,messageId:mid,targetUid:uid,targetUsername:un||'',reason:'',desc:'',err:'',chatKind:kind,archiveId:'',...reportContext(mid,kind)});render()}
+function openReportArchive(aid,mid,uid){Object.assign(MOD,{open:1,kind:'message',friendId:'',messageId:mid,targetUid:uid,targetUsername:'',reason:'',desc:'',err:'',chatKind:'archive',archiveId:aid,...reportContext(mid,'archive')});render()}
+function openReportUser(fid,uid,n,u){Object.assign(MOD,{open:1,kind:'user',friendId:fid,messageId:'',targetUid:uid,targetName:n||'',targetUsername:u||'',reason:'',desc:'',err:''});render()}
 function closeReport(){reportReset();render()}
 function reportLabel(){return MOD.kind==='message'?'الرسالة':'المستخدم'}
 function vReportPanel(){
@@ -24,7 +19,7 @@ async function submitReport(){
  if(!reason){MOD.err='اختار سبب البلاغ الأول.';render();return}
  if(!USER||!ME||!ACT){MOD.err='لازم تكون مسجّل دخول عشان تبعت بلاغ.';render();return}
  MOD.busy=1;MOD.err='';render();
- try{const{U,fs}=await fbx(),now=fs.serverTimestamp();await fs.addDoc(fs.collection(U.db,'reports'),{type:'user_report',kind:MOD.kind,reporterUid:ME,reporterUsername:USER.username||'',targetUid:MOD.targetUid,targetUsername:MOD.targetUsername||'',friendshipId:MOD.friendId||'',messageId:MOD.messageId||'',chatKind:MOD.chatKind||'dm',messageText:MOD.messageText||'',context:MOD.context||'',targetName:MOD.targetName||'',reason,description:desc,status:'new',createdAt:now,updatedAt:now});reportReset();toast('اتبعث البلاغ ✓');render()}
+ try{const{U,fs}=await fbx(),now=fs.serverTimestamp();await fs.addDoc(fs.collection(U.db,'reports'),{type:'user_report',kind:MOD.kind,reporterUid:ME,reporterUsername:USER.username||'',targetUid:MOD.targetUid||'',targetUsername:MOD.targetUsername||'',targetName:MOD.targetName||'',friendshipId:MOD.friendId||'',messageId:MOD.messageId||'',chatKind:MOD.chatKind||'dm',archiveId:MOD.archiveId||'',messageText:MOD.messageText||'',context:MOD.context||'',reason,description:desc,status:'new',createdAt:now,updatedAt:now});reportReset();toast('اتبعث البلاغ ✓');render()}
  catch(e){MOD.busy=0;MOD.err=e&&e.code==='permission-denied'?'البلاغات لسه مش مفعّلة في قواعد Firebase.':'مقدرتش أبعت البلاغ. حاول تاني.';render()}}
 function vIssueForm(){
  return `<details class="c"><summary><b>🛠 الإبلاغ عن مشكلة في التطبيق</b></summary><p><small>لو فيه عطل أو حاجة مش شغالة، ابعتها للمطور مع وصف واضح.</small></p><select id="isub"><option value="bug">عطل أو خطأ</option><option value="ui">مشكلة في الواجهة</option><option value="login">التسجيل أو كود الدعوة</option><option value="study">المذاكرة أو المؤقت</option><option value="memory">الحفظ والاختبارات</option><option value="chat">الأصحاب والدردشة</option><option value="suggestion">اقتراح تحسين</option></select><textarea id="idesc" maxlength="1500" placeholder="إيه اللي حصل؟ وإزاي نقدر نعيد المشكلة؟"></textarea>${ISSUE.err?`<p style="color:var(--bad)"><b>${esc(ISSUE.err)}</b></p>`:''}<button class="pr" onclick="submitIssue()" ${ISSUE.busy?'disabled':''}>${ISSUE.busy?'بيبعت...':'إرسال المشكلة'}</button></details>`}
